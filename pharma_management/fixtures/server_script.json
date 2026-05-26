@@ -1,1 +1,40 @@
-[]
+[
+ {
+  "allow_guest": 0,
+  "api_method": null,
+  "cron_format": null,
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Server Script",
+  "doctype_event": "Before Submit",
+  "enable_rate_limit": 0,
+  "event_frequency": "All",
+  "modified": "2026-05-26 14:44:24.950542",
+  "module": null,
+  "name": "free qty si",
+  "rate_limit_count": 5,
+  "rate_limit_seconds": 86400,
+  "reference_doctype": "Sales Invoice",
+  "script": "\"\"\"\nHooked to 'before_save' and 'before_submit'.\nForces ERPNext to deduct both standard and free quantities from warehouse stock.\n\"\"\"\nfor item in doc.items:\n    # Check if our custom free_qty field has a value\n    free_qty = frappe.utils.flt(item.get(\"custom_free_qty\"))\n    billed_qty = frappe.utils.flt(item.qty)\n    \n    if free_qty > 0:\n        total_physical_qty = billed_qty + free_qty\n        conversion_factor = frappe.utils.flt(item.conversion_factor) or 1.0\n        \n        # 'stock_qty' is the hidden field ERPNext uses to post to the Stock Ledger (Serial / Batch Bundle)\n        item.stock_qty = total_physical_qty * conversion_factor",
+  "script_type": "DocType Event"
+ },
+ {
+  "allow_guest": 0,
+  "api_method": null,
+  "cron_format": null,
+  "disabled": 0,
+  "docstatus": 0,
+  "doctype": "Server Script",
+  "doctype_event": "Before Save",
+  "enable_rate_limit": 0,
+  "event_frequency": "All",
+  "modified": "2026-05-26 14:44:51.847677",
+  "module": null,
+  "name": "Add free qty in SI",
+  "rate_limit_count": 5,
+  "rate_limit_seconds": 86400,
+  "reference_doctype": "Sales Invoice",
+  "script": "\"\"\"\nHooked to 'before_save' and 'before_submit'.\nForces ERPNext to deduct both standard and free quantities from warehouse stock.\n\"\"\"\nfor item in doc.items:\n    # Check if our custom free_qty field has a value\n    free_qty = frappe.utils.flt(item.get(\"custom_free_qty\"))\n    billed_qty = frappe.utils.flt(item.qty)\n    \n    if free_qty > 0:\n        total_physical_qty = billed_qty + free_qty\n        conversion_factor = frappe.utils.flt(item.conversion_factor) or 1.0\n        \n        # 'stock_qty' is the hidden field ERPNext uses to post to the Stock Ledger (Serial / Batch Bundle)\n        item.stock_qty = total_physical_qty * conversion_factor",
+  "script_type": "DocType Event"
+ }
+]

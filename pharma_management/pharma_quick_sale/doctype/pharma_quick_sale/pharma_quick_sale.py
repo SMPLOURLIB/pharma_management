@@ -3,7 +3,6 @@ from frappe.model.document import Document
 from frappe.utils import flt, getdate, nowdate
 from erpnext.stock.get_item_details import get_item_details
 
-
 class PharmaQuickSale(Document):
     def validate(self):
         self.set_item_totals()
@@ -1024,11 +1023,6 @@ def run_go_live_preflight(company=None, warehouse=None):
         "transactions": transactions
     }
 
-
-@frappe.whitelist()
-import frappe
-from frappe.utils import flt, nowdate
-from erpnext.stock.get_item_details import get_item_details
 
 @frappe.whitelist()
 def get_live_sales_totals(data):

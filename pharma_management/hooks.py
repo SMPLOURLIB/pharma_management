@@ -18,7 +18,9 @@ fixtures = [
     # NEW: Captures all hidden/modified field settings you just changed in Customize Form
     {"dt": "Property Setter", "filters": [["doc_type", "in", ["Sales Invoice", "Sales Invoice Item"]]]},
 
-    {"dt": "Client Script","filters": [["dt", "in", ["Sales Invoice"]]]}
+    {"dt": "Client Script","filters": [["dt", "in", ["Sales Invoice"]]]},
+
+    {"dt": "Server Script","filters": [["reference_doctype", "in", ["Sales Invoice"]]]},
 ]
 
 doc_events = {

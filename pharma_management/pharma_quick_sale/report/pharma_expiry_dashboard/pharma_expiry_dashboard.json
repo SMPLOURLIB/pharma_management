@@ -1,0 +1,8 @@
+{
+  "doctype": "Report",
+  "name": "Pharma Expiry Dashboard",
+  "ref_doctype": "Batch",
+  "report_type": "Script Report",
+  "module": "Pharma Quick Sale",
+  "is_standard": "Yes"
+}

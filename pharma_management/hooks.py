@@ -5,6 +5,36 @@ app_description = "Pharma Quick sales and purhcase"
 app_email = "support@ourlib.in"
 app_license = "mit"
 
+
+
+
+fixtures = ["Custom Field"]
+# Open pharma_pos/pharma_pos/hooks.py
+
+fixtures = [
+    # Captures your custom fields (barcode, free_qty)
+    {"dt": "Custom Field", "filters": [["dt", "in", ["Sales Invoice", "Sales Invoice Item"]]]},
+    
+    # NEW: Captures all hidden/modified field settings you just changed in Customize Form
+    {"dt": "Property Setter", "filters": [["doc_type", "in", ["Sales Invoice", "Sales Invoice Item"]]]},
+
+    {"dt": "Client Script","filters": [["dt", "in", ["Sales Invoice"]]]}
+]
+
+doc_events = {
+    "Sales Invoice": {
+        "validate": "pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.copy_pharma_fields_to_sales_invoice",
+        "on_submit": "pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.consume_reservations_for_sales_invoice",
+        "on_cancel": "pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.release_reservations_for_sales_invoice"
+    },
+    "Sales Order": {
+        "on_cancel": "pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.release_reservations_for_sales_order"
+    }
+}
+
+
+
+
 # Apps
 # ------------------
 

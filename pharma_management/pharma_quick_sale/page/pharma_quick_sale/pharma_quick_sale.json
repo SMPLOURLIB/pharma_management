@@ -1,0 +1,14 @@
+{
+  "doctype": "Page",
+  "name": "pharma_quick_sale",
+  "module": "Pharma Quick Sale",
+  "title": "Pharma Quick Sale",
+  "roles": [
+    {
+      "role": "Sales User"
+    },
+    {
+      "role": "System Manager"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "doctype": "Report",
+  "name": "Pharma Go Live Preflight",
+  "ref_doctype": "Pharma Quick Sale",
+  "report_type": "Script Report",
+  "module": "Pharma Quick Sale",
+  "is_standard": "Yes"
+}

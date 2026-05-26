@@ -1,0 +1,8 @@
+{
+  "doctype": "Report",
+  "name": "Pharma Reservation Validation",
+  "ref_doctype": "Pharma Batch Reservation",
+  "report_type": "Script Report",
+  "module": "Pharma Quick Sale",
+  "is_standard": "Yes"
+}

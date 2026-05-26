@@ -1,0 +1,17 @@
+{
+  "doctype": "Page",
+  "name": "pharma_fast_grn",
+  "module": "Pharma Quick Sale",
+  "title": "Pharma Fast GRN",
+  "roles": [
+    {
+      "role": "Purchase User"
+    },
+    {
+      "role": "Stock User"
+    },
+    {
+      "role": "System Manager"
+    }
+  ]
+}

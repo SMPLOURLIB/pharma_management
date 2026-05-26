@@ -1,0 +1,111 @@
+{
+  "doctype": "DocType",
+  "name": "Pharma Batch Reservation",
+  "module": "Pharma Quick Sale",
+  "custom": 0,
+  "is_submittable": 1,
+  "autoname": "naming_series:",
+  "fields": [
+    {
+      "fieldname": "naming_series",
+      "fieldtype": "Select",
+      "label": "Series",
+      "options": "PBR-.YYYY.-.#####",
+      "default": "PBR-.YYYY.-.#####"
+    },
+    {
+      "fieldname": "sales_order",
+      "fieldtype": "Link",
+      "label": "Sales Order",
+      "options": "Sales Order"
+    },
+    {
+      "fieldname": "item_code",
+      "fieldtype": "Link",
+      "label": "Item",
+      "options": "Item",
+      "reqd": 1
+    },
+    {
+      "fieldname": "sales_invoice",
+      "fieldtype": "Link",
+      "label": "Sales Invoice",
+      "options": "Sales Invoice"
+    },
+    {
+      "fieldname": "warehouse",
+      "fieldtype": "Link",
+      "label": "Warehouse",
+      "options": "Warehouse",
+      "reqd": 1
+    },
+    {
+      "fieldname": "batch_no",
+      "fieldtype": "Link",
+      "label": "Batch",
+      "options": "Batch",
+      "reqd": 1
+    },
+    {
+      "fieldname": "reserved_qty",
+      "fieldtype": "Float",
+      "label": "Reserved Qty",
+      "reqd": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Active\nReleased\nConsumed",
+      "default": "Active"
+    },
+    {
+      "fieldname": "last_sales_invoice",
+      "fieldtype": "Link",
+      "label": "Last Sales Invoice",
+      "options": "Sales Invoice",
+      "read_only": 1
+    },
+    {
+      "fieldname": "consumed_qty",
+      "fieldtype": "Float",
+      "label": "Consumed Qty",
+      "read_only": 1,
+      "default": 0
+    },
+    {
+      "fieldname": "original_reserved_qty",
+      "fieldtype": "Float",
+      "label": "Original Reserved Qty",
+      "read_only": 1,
+      "default": 0
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1
+    },
+    {
+      "role": "Sales User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "submit": 1
+    },
+    {
+      "role": "Stock User",
+      "read": 1
+    },
+    {
+      "role": "Accounts User",
+      "read": 1
+    }
+  ]
+}

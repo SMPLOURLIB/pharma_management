@@ -1,0 +1,10 @@
+{
+  "doctype": "Print Format",
+  "name": "Pharma Thermal Invoice",
+  "doc_type": "Sales Invoice",
+  "module": "Pharma Quick Sale",
+  "standard": "Yes",
+  "print_format_type": "Jinja",
+  "disabled": 0,
+  "html": "<div style=\"font-size:11px; width:80mm; font-family:Arial, sans-serif;\">\n<h3 style=\"text-align:center; margin:0;\">{{ doc.company }}</h3>\n<p style=\"text-align:center; margin:2px 0;\"><b>GST TAX INVOICE</b></p>\n<p style=\"margin:2px 0;\">\n<b>Invoice:</b> {{ doc.name }}<br>\n<b>Date:</b> {{ doc.posting_date }}<br>\n<b>Customer:</b> {{ doc.customer_name or doc.customer }}<br>\n{% if doc.customer_gstin %}<b>Customer GSTIN:</b> {{ doc.customer_gstin }}<br>{% endif %}\n{% if doc.company_gstin %}<b>Company GSTIN:</b> {{ doc.company_gstin }}<br>{% endif %}\n</p>\n<table style=\"width:100%; border-collapse:collapse;\" border=\"1\">\n<tr>\n<th>Item</th><th>HSN</th><th>Batch</th><th>Exp</th><th>Qty</th><th>Rate</th><th>Amt</th>\n</tr>\n{% for item in doc.items %}\n<tr>\n<td>{{ item.item_name or item.item_code }}</td>\n<td>{{ item.gst_hsn_code or \"\" }}</td>\n<td>{{ item.batch_no or \"\" }}</td>\n<td>{{ frappe.db.get_value(\"Batch\", item.batch_no, \"expiry_date\") if item.batch_no else \"\" }}</td>\n<td>{{ item.qty }}</td>\n<td>{{ item.rate }}</td>\n<td>{{ item.amount }}</td>\n</tr>\n{% endfor %}\n</table>\n<table style=\"width:100%; margin-top:4px;\">\n<tr><td>Net Total</td><td style=\"text-align:right;\">{{ doc.net_total }}</td></tr>\n<tr><td>Tax</td><td style=\"text-align:right;\">{{ doc.total_taxes_and_charges }}</td></tr>\n<tr><td><b>Grand Total</b></td><td style=\"text-align:right;\"><b>{{ doc.grand_total }}</b></td></tr>\n</table>\n<p style=\"text-align:center; margin-top:6px;\">Thank you</p>\n</div>\n<p style=\"font-size:9px; text-align:center; margin-top:6px;\">\nSubject to realization of payment. Please verify batch and expiry at delivery.\n</p>\n"
+}

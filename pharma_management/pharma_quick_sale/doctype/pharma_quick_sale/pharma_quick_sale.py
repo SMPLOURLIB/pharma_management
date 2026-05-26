@@ -1026,6 +1026,11 @@ def run_go_live_preflight(company=None, warehouse=None):
 
 
 @frappe.whitelist()
+import frappe
+from frappe.utils import flt, nowdate
+from erpnext.stock.get_item_details import get_item_details
+
+@frappe.whitelist()
 def get_live_sales_totals(data):
     """Return live ERPNext-calculated totals for Quick Sale.
 
@@ -1033,7 +1038,6 @@ def get_live_sales_totals(data):
     - Uses visible item rows for provisional totals even before FEFO/batch allocation.
     - Uses batch allocations when available.
     - Does not insert or submit any document.
-    - Final save still requires batch allocations.
     """
     if isinstance(data, str):
         data = frappe.parse_json(data)
@@ -1059,6 +1063,11 @@ def get_live_sales_totals(data):
     invoice.set_posting_time = 1
     invoice.update_stock = 1
     invoice.selling_price_list = data.get("price_list") or "Standard Selling"
+    
+    # FIX 1: Set the Tax Template if passed from frontend, 
+    # or let ERPNext fetch the default for this customer/company.
+    if data.get("taxes_and_charges"):
+        invoice.taxes_and_charges = data.get("taxes_and_charges")
 
     item_by_row = {}
     allocations_by_row = {}
@@ -1103,13 +1112,13 @@ def get_live_sales_totals(data):
             "uom": row.get("uom") or item_details.get("uom"),
             "conversion_factor": flt(row.get("conversion_factor")) or item_details.get("conversion_factor") or 1,
             "discount_percentage": flt(row.get("discount_percentage")),
+            # Setting item tax template ensures item-wise tax rule mappings work
             "item_tax_template": item_details.get("item_tax_template"),
             "income_account": item_details.get("income_account"),
             "cost_center": item_details.get("cost_center"),
             "description": description or item_details.get("description") or row.get("item_name") or item_code
         }
 
-        # Include batch when available, but provisional calculation does not require it.
         if batch_no:
             values["batch_no"] = batch_no
 
@@ -1124,38 +1133,12 @@ def get_live_sales_totals(data):
         row_allocations = allocations_by_row.get(row_id) or []
 
         if row_allocations:
-            # Use actual batch allocation split when available.
             for alloc in row_allocations:
-                append_invoice_row(
-                    row,
-                    alloc.get("qty"),
-                    row.get("rate"),
-                    item_details,
-                    batch_no=alloc.get("batch_no")
-                )
-                append_invoice_row(
-                    row,
-                    alloc.get("free_qty"),
-                    0,
-                    item_details,
-                    batch_no=alloc.get("batch_no"),
-                    description=f"Free Sample - {item_code}"
-                )
+                append_invoice_row(row, alloc.get("qty"), row.get("rate"), item_details, batch_no=alloc.get("batch_no"))
+                append_invoice_row(row, alloc.get("free_qty"), 0, item_details, batch_no=alloc.get("batch_no"), description=f"Free Sample - {item_code}")
         else:
-            # Provisional live calculation from visible row values.
-            append_invoice_row(
-                row,
-                row.get("qty"),
-                row.get("rate"),
-                item_details
-            )
-            append_invoice_row(
-                row,
-                row.get("free_qty"),
-                0,
-                item_details,
-                description=f"Free Sample - {item_code}"
-            )
+            append_invoice_row(row, row.get("qty"), row.get("rate"), item_details)
+            append_invoice_row(row, row.get("free_qty"), 0, item_details, description=f"Free Sample - {item_code}")
 
     if not invoice.items:
         return {
@@ -1167,11 +1150,18 @@ def get_live_sales_totals(data):
             "taxes": []
         }
 
+    # FIX 2: Trigger standard document setups to pull tax templates if not explicitly passed
+    invoice.run_method("set_missing_values")
+    
+    # FIX 3: Force load the taxes from the template into the child table before running calculations
+    if invoice.taxes_and_charges and not invoice.taxes:
+        invoice.append_taxes_from_template()
+
     if flt(data.get("bill_discount_amount")) > 0:
         invoice.apply_discount_on = "Grand Total"
         invoice.discount_amount = flt(data.get("bill_discount_amount"))
 
-    invoice.run_method("set_missing_values")
+    # FIX 4: Re-trigger calculations now that items and tax rules are explicitly loaded
     invoice.calculate_taxes_and_totals()
 
     return {

@@ -524,7 +524,7 @@ class PharmaQuickSalePage {
 
         const qty =
             flt(row.find('.qty').val()) +
-            flt(row.find('.free_qty').val());
+            flt(row.find('.free-qty').val());
 
         if (!qty || qty <= 0) {
             frappe.msgprint(__('Please enter qty first'));
@@ -593,7 +593,7 @@ class PharmaQuickSalePage {
             );
             
             if (bundle.docstatus === 0) {
-            
+                // // To submit bundle we require voucher_no
                 // await frappe.call({
                 //     method: "frappe.client.submit",
                 //     args: {
@@ -602,27 +602,11 @@ class PharmaQuickSalePage {
                 // });
             }
 
-
+            row.data('batch_rows', r.name);
             row.data(
                 'serial_and_batch_bundle',
                 r.name
             );
-
-            // fetch selected batches from bundle
-
-            // frappe.call({
-            //     method: "frappe.client.get",
-            //     args: {
-            //         doctype: "Serial and Batch Bundle",
-            //         name: r.name
-            //     },
-
-            //     callback: (res) => {
-
-            //         let doc = res.message || {};
-
-            //         // save entries locally
-
 
             this.render_bundle(row);
 

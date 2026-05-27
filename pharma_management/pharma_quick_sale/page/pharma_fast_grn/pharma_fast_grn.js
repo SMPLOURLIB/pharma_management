@@ -120,7 +120,7 @@ class PharmaFastGRNPage {
             return;
         }
         frappe.call({
-            method: 'pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.create_fast_grn',
+            method: 'pharma_quick_sale.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.create_fast_grn',
             args: {data},
             freeze: true,
             freeze_message: 'Creating Purchase Receipt...',

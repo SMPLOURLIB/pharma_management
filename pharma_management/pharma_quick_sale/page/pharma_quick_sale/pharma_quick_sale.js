@@ -731,11 +731,11 @@ class PharmaQuickSalePage {
 
         const lines = (taxes || []).map(t => `
             <div class="pqs-info-line">
-                <span>${t.description || t.account_head}</span>
+                <span>${t.description || t.account_head}${t.rate ? ' (' + t.rate + '%)' : ''}</span>
                 <strong>₹ ${flt(t.tax_amount).toFixed(2)}</strong>
             </div>
         `).join('');
-        $('#pqs-tax-lines').html(lines || '<div class="pqs-muted">No tax lines yet.</div>');
+        $('#pqs-tax-lines').html(lines || '<div class="pqs-muted">No tax lines yet. Check Sales Taxes and Charges Template.</div>');
     }
 
     clear() {

@@ -3,6 +3,7 @@ from frappe.model.document import Document
 from frappe.utils import flt, getdate, nowdate
 from erpnext.stock.get_item_details import get_item_details
 
+
 class PharmaQuickSale(Document):
     def validate(self):
         self.set_item_totals()
@@ -100,7 +101,15 @@ class PharmaQuickSale(Document):
                 "warehouse": self.warehouse,
                 "uom": row.uom or item_details.get("uom"),
                 "conversion_factor": flt(row.conversion_factor) or item_details.get("conversion_factor") or 1,
-                "item_tax_template": item_details.get("item_tax_template"),
+                "item_tax_template": (
+                item_details.get("item_tax_template")
+                or row.get("item_tax_template")
+                or _get_item_tax_template_from_item(
+                    item_code,
+                    tax_category=tax_category,
+                    posting_date=data.get("posting_date") or nowdate()
+                )
+            ),
                 "income_account": item_details.get("income_account"),
                 "cost_center": item_details.get("cost_center"),
                 "description": description or item_details.get("description") or row.item_name
@@ -199,6 +208,7 @@ def create_quick_sale(data, action="invoice"):
     doc.customer = data.get("customer")
     doc.company = data.get("company")
     doc.warehouse = data.get("warehouse")
+    tax_category = data.get("tax_category")
     doc.posting_date = data.get("posting_date") or nowdate()
     doc.price_list = data.get("price_list") or "Standard Selling"
     doc.bill_discount_amount = flt(data.get("bill_discount_amount"))
@@ -1024,13 +1034,245 @@ def run_go_live_preflight(company=None, warehouse=None):
     }
 
 
+
+def _doctype_has_field(doctype, fieldname):
+    """Safe field existence check for ERPNext v14/v15/customized sites."""
+    try:
+        return frappe.get_meta(doctype).has_field(fieldname)
+    except Exception:
+        return False
+
+
+def _safe_get_value_if_field_exists(doctype, name_or_filters, fieldname):
+    """Read a field only when the field exists to avoid runtime SQL errors."""
+    if not _doctype_has_field(doctype, fieldname):
+        return None
+    try:
+        return frappe.db.get_value(doctype, name_or_filters, fieldname)
+    except Exception:
+        return None
+
+
+def _apply_sales_taxes_template_for_live_calc(invoice, customer=None):
+    """Apply Sales Taxes and Charges Template to an unsaved invoice.
+
+    Hardened for ERPNext v14/v15:
+    - Does not assume Customer has taxes_and_charges.
+    - Does not assume Company has default_sales_taxes_and_charges_template.
+    - Falls back to default/first enabled Sales Taxes and Charges Template.
+    - Returns None cleanly if no template exists.
+    """
+    template = None
+
+    # 1. Customer-specific tax template, only if field exists.
+    if customer:
+        template = _safe_get_value_if_field_exists("Customer", customer, "taxes_and_charges")
+
+    # 2. Company default Sales Taxes and Charges Template, only if field exists.
+    if not template and invoice.company:
+        template = _safe_get_value_if_field_exists(
+            "Company",
+            invoice.company,
+            "default_sales_taxes_and_charges_template"
+        )
+
+    # 3. Default enabled company template.
+    if not template and invoice.company:
+        template = frappe.db.get_value(
+            "Sales Taxes and Charges Template",
+            {
+                "company": invoice.company,
+                "is_default": 1,
+                "disabled": 0
+            },
+            "name"
+        )
+
+    # 4. First enabled company template.
+    if not template and invoice.company:
+        template = frappe.db.get_value(
+            "Sales Taxes and Charges Template",
+            {
+                "company": invoice.company,
+                "disabled": 0
+            },
+            "name"
+        )
+
+    # 5. Last fallback: first enabled template regardless of company.
+    # Useful for early UAT where company may not be tagged on templates.
+    if not template:
+        template = frappe.db.get_value(
+            "Sales Taxes and Charges Template",
+            {
+                "disabled": 0
+            },
+            "name"
+        )
+
+    if not template:
+        return None
+
+    invoice.taxes_and_charges = template
+
+    tax_rows = frappe.get_all(
+        "Sales Taxes and Charges",
+        filters={
+            "parent": template,
+            "parenttype": "Sales Taxes and Charges Template"
+        },
+        fields=[
+            "charge_type",
+            "row_id",
+            "account_head",
+            "description",
+            "included_in_print_rate",
+            "included_in_paid_amount",
+            "cost_center",
+            "rate",
+            "tax_amount",
+            "total",
+            "tax_amount_after_discount_amount",
+            "base_tax_amount",
+            "base_total",
+            "base_tax_amount_after_discount_amount",
+            "item_wise_tax_detail",
+            "dont_recompute_tax",
+            "add_deduct_tax",
+            "category"
+        ],
+        order_by="idx asc"
+    )
+
+    invoice.set("taxes", [])
+
+    for tax in tax_rows:
+        row = invoice.append("taxes", {})
+        for key, value in tax.items():
+            if key not in ("name", "parent", "parenttype", "parentfield", "idx", "doctype"):
+                row.set(key, value)
+
+    return template
+
+
+def _get_item_tax_template_from_item(item_code, tax_category=None, posting_date=None):
+    """Resolve Item Tax Template directly from Item -> Taxes child table.
+
+    Works across ERPNext v14/v15 field variants by inspecting Item Tax metadata.
+    """
+    if not item_code:
+        return None
+
+    try:
+        meta = frappe.get_meta("Item Tax")
+    except Exception:
+        return None
+
+    fields = [df.fieldname for df in meta.fields]
+    if "item_tax_template" not in fields:
+        return None
+
+    conditions = ["parent = %s", "parenttype = 'Item'", "IFNULL(item_tax_template, '') != ''"]
+    values = [item_code]
+
+    if tax_category and "tax_category" in fields:
+        conditions.append("(tax_category = %s OR IFNULL(tax_category, '') = '')")
+        values.append(tax_category)
+
+    if posting_date and "valid_from" in fields:
+        conditions.append("(valid_from IS NULL OR valid_from <= %s)")
+        values.append(posting_date)
+
+    order_by = "idx ASC"
+    if "valid_from" in fields:
+        order_by = "valid_from DESC, idx ASC"
+
+    rows = frappe.db.sql(f"""
+        SELECT item_tax_template
+        FROM `tabItem Tax`
+        WHERE {' AND '.join(conditions)}
+        ORDER BY {order_by}
+        LIMIT 1
+    """, tuple(values), as_dict=True)
+
+    return rows[0].item_tax_template if rows else None
+
+
+def _get_item_tax_template_accounts(item_tax_template):
+    """Return account/rate rows from Item Tax Template Detail."""
+    if not item_tax_template:
+        return []
+
+    try:
+        meta = frappe.get_meta("Item Tax Template Detail")
+    except Exception:
+        return []
+
+    fields = [df.fieldname for df in meta.fields]
+
+    account_field = "tax_type" if "tax_type" in fields else None
+    rate_field = "tax_rate" if "tax_rate" in fields else None
+
+    if not account_field or not rate_field:
+        return []
+
+    return frappe.db.sql(f"""
+        SELECT {account_field} AS account_head, {rate_field} AS rate
+        FROM `tabItem Tax Template Detail`
+        WHERE parent = %s
+        ORDER BY idx ASC
+    """, item_tax_template, as_dict=True)
+
+
+def _ensure_tax_rows_for_live_item_tax_templates(invoice):
+    """Ensure tax rows exist for item-wise tax calculation.
+
+    ERPNext item tax templates override rates on tax accounts, but tax rows must
+    still exist on the Sales Invoice. If no Sales Taxes and Charges Template is
+    applied, this creates one tax row per account used by the item tax templates.
+    """
+    existing_accounts = set()
+    for tax in invoice.taxes:
+        if getattr(tax, "account_head", None):
+            existing_accounts.add(tax.account_head)
+
+    account_rates = {}
+
+    for item in invoice.items:
+        item_tax_template = getattr(item, "item_tax_template", None)
+        if not item_tax_template:
+            continue
+
+        for row in _get_item_tax_template_accounts(item_tax_template):
+            account_head = row.get("account_head")
+            if not account_head:
+                continue
+
+            # Use the actual rate as default; ERPNext may override item-wise.
+            account_rates[account_head] = flt(row.get("rate"))
+
+    for account_head, rate in account_rates.items():
+        if account_head in existing_accounts:
+            continue
+
+        invoice.append("taxes", {
+            "charge_type": "On Net Total",
+            "account_head": account_head,
+            "description": account_head,
+            "rate": rate
+        })
+
+
 @frappe.whitelist()
 def get_live_sales_totals(data):
     """Return live ERPNext-calculated totals for Quick Sale.
 
-    v13 behavior:
-    - Uses visible item rows for provisional totals even before FEFO/batch allocation.
-    - Uses batch allocations when available.
+    v19 behavior:
+    - Reads Item Tax Template directly from Item master when get_item_details()
+      does not return it.
+    - Assigns item_tax_template to every live Sales Invoice row.
+    - Ensures required tax account rows exist.
+    - Allows different items to carry different item tax templates.
     - Does not insert or submit any document.
     """
     if isinstance(data, str):
@@ -1039,6 +1281,8 @@ def get_live_sales_totals(data):
     customer = data.get("customer")
     company = data.get("company")
     warehouse = data.get("warehouse")
+    tax_category = data.get("tax_category")
+    posting_date = data.get("posting_date") or nowdate()
 
     if not customer or not company:
         return {
@@ -1047,21 +1291,18 @@ def get_live_sales_totals(data):
             "net_total": 0,
             "total_taxes_and_charges": 0,
             "grand_total": 0,
-            "taxes": []
+            "taxes": [],
+            "tax_template": None,
+            "items": []
         }
 
     invoice = frappe.new_doc("Sales Invoice")
     invoice.customer = customer
     invoice.company = company
-    invoice.posting_date = data.get("posting_date") or nowdate()
+    invoice.posting_date = posting_date
     invoice.set_posting_time = 1
     invoice.update_stock = 1
     invoice.selling_price_list = data.get("price_list") or "Standard Selling"
-    
-    # FIX 1: Set the Tax Template if passed from frontend, 
-    # or let ERPNext fetch the default for this customer/company.
-    if data.get("taxes_and_charges"):
-        invoice.taxes_and_charges = data.get("taxes_and_charges")
 
     item_by_row = {}
     allocations_by_row = {}
@@ -1089,15 +1330,30 @@ def get_live_sales_totals(data):
             "conversion_rate": 1,
             "price_list_currency": currency,
             "plc_conversion_rate": 1,
-            "transaction_date": data.get("posting_date") or nowdate()
+            "transaction_date": posting_date,
+            "warehouse": warehouse
         }
         return get_item_details(args)
+
+    def resolve_item_tax_template(row, item_details):
+        item_code = row.get("item_code")
+        return (
+            item_details.get("item_tax_template")
+            or row.get("item_tax_template")
+            or _get_item_tax_template_from_item(
+                item_code,
+                tax_category=tax_category,
+                posting_date=posting_date
+            )
+        )
 
     def append_invoice_row(row, qty, rate, item_details, batch_no=None, description=None):
         if flt(qty) <= 0:
             return
 
         item_code = row.get("item_code")
+        item_tax_template = resolve_item_tax_template(row, item_details)
+
         values = {
             "item_code": item_code,
             "qty": flt(qty),
@@ -1106,8 +1362,7 @@ def get_live_sales_totals(data):
             "uom": row.get("uom") or item_details.get("uom"),
             "conversion_factor": flt(row.get("conversion_factor")) or item_details.get("conversion_factor") or 1,
             "discount_percentage": flt(row.get("discount_percentage")),
-            # Setting item tax template ensures item-wise tax rule mappings work
-            "item_tax_template": item_details.get("item_tax_template"),
+            "item_tax_template": item_tax_template,
             "income_account": item_details.get("income_account"),
             "cost_center": item_details.get("cost_center"),
             "description": description or item_details.get("description") or row.get("item_name") or item_code
@@ -1128,11 +1383,30 @@ def get_live_sales_totals(data):
 
         if row_allocations:
             for alloc in row_allocations:
-                append_invoice_row(row, alloc.get("qty"), row.get("rate"), item_details, batch_no=alloc.get("batch_no"))
-                append_invoice_row(row, alloc.get("free_qty"), 0, item_details, batch_no=alloc.get("batch_no"), description=f"Free Sample - {item_code}")
+                append_invoice_row(
+                    row,
+                    alloc.get("qty"),
+                    row.get("rate"),
+                    item_details,
+                    batch_no=alloc.get("batch_no")
+                )
+                append_invoice_row(
+                    row,
+                    alloc.get("free_qty"),
+                    0,
+                    item_details,
+                    batch_no=alloc.get("batch_no"),
+                    description=f"Free Sample - {item_code}"
+                )
         else:
             append_invoice_row(row, row.get("qty"), row.get("rate"), item_details)
-            append_invoice_row(row, row.get("free_qty"), 0, item_details, description=f"Free Sample - {item_code}")
+            append_invoice_row(
+                row,
+                row.get("free_qty"),
+                0,
+                item_details,
+                description=f"Free Sample - {item_code}"
+            )
 
     if not invoice.items:
         return {
@@ -1141,26 +1415,30 @@ def get_live_sales_totals(data):
             "net_total": 0,
             "total_taxes_and_charges": 0,
             "grand_total": 0,
-            "taxes": []
+            "taxes": [],
+            "tax_template": None,
+            "items": []
         }
-
-    # FIX 2: Trigger standard document setups to pull tax templates if not explicitly passed
-    invoice.run_method("set_missing_values")
-    
-    # FIX 3: Force load the taxes from the template into the child table before running calculations
-    if invoice.taxes_and_charges and not invoice.taxes:
-        invoice.append_taxes_from_template()
 
     if flt(data.get("bill_discount_amount")) > 0:
         invoice.apply_discount_on = "Grand Total"
         invoice.discount_amount = flt(data.get("bill_discount_amount"))
 
-    # FIX 4: Re-trigger calculations now that items and tax rules are explicitly loaded
+    tax_template = _apply_sales_taxes_template_for_live_calc(invoice, customer=customer)
+
+    invoice.run_method("set_missing_values")
+
+    if tax_template and not invoice.taxes:
+        _apply_sales_taxes_template_for_live_calc(invoice, customer=customer)
+
+    _ensure_tax_rows_for_live_item_tax_templates(invoice)
+
     invoice.calculate_taxes_and_totals()
 
     return {
         "ready": True,
         "message": "",
+        "tax_template": tax_template,
         "net_total": flt(invoice.net_total),
         "total_taxes_and_charges": flt(invoice.total_taxes_and_charges),
         "grand_total": flt(invoice.grand_total),
@@ -1170,10 +1448,21 @@ def get_live_sales_totals(data):
             {
                 "description": tax.description,
                 "account_head": tax.account_head,
+                "charge_type": tax.charge_type,
                 "rate": flt(tax.rate),
                 "tax_amount": flt(tax.tax_amount),
-                "total": flt(tax.total)
+                "total": flt(tax.total),
+                "item_wise_tax_detail": tax.item_wise_tax_detail
             }
             for tax in invoice.taxes
+        ],
+        "items": [
+            {
+                "item_code": item.item_code,
+                "item_tax_template": item.item_tax_template,
+                "net_amount": flt(item.net_amount),
+                "amount": flt(item.amount)
+            }
+            for item in invoice.items
         ]
     }

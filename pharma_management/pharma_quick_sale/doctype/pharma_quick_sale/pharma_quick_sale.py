@@ -1363,7 +1363,7 @@ def get_live_sales_totals(data):
             "item_tax_template": item_tax_template,
             "income_account": item_details.get("income_account"),
             "cost_center": item_details.get("cost_center"),
-            "description": description or item_details.get("description") or row.get("item_name") or item_code
+            "description": description or item_details.get("description") or row.get("item_name") or item_code,
 
             "serial_and_batch_bundle": row.get("serial_and_batch_bundle")
         }

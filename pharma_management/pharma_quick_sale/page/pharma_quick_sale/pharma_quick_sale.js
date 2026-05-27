@@ -1,4 +1,4 @@
-frappe.pages['pharma_quick_sale'].on_page_load = function(wrapper) {
+frappe.pages['pharma_quick_sale'].on_page_load = function (wrapper) {
     new PharmaQuickSalePage(wrapper);
 };
 
@@ -263,20 +263,20 @@ class PharmaQuickSalePage {
     make_controls() {
         this.customer = frappe.ui.form.make_control({
             parent: $('#pqs-customer'),
-            df: {fieldtype:'Link', options:'Customer', fieldname:'customer', label:'Customer', reqd:1, onchange: () => this.schedule_live_calculation()},
+            df: { fieldtype: 'Link', options: 'Customer', fieldname: 'customer', label: 'Customer', reqd: 1, onchange: () => this.schedule_live_calculation() },
             render_input: true
         });
 
         this.company = frappe.ui.form.make_control({
             parent: $('#pqs-company'),
-            df: {fieldtype:'Link', options:'Company', fieldname:'company', label:'Company', reqd:1, onchange: () => this.schedule_live_calculation()},
+            df: { fieldtype: 'Link', options: 'Company', fieldname: 'company', label: 'Company', reqd: 1, onchange: () => this.schedule_live_calculation() },
             render_input: true
         });
         this.company.set_value(frappe.defaults.get_default('company'));
 
         this.warehouse = frappe.ui.form.make_control({
             parent: $('#pqs-warehouse'),
-            df: {fieldtype:'Link', options:'Warehouse', fieldname:'warehouse', label:'Warehouse', reqd:1, onchange: () => this.schedule_live_calculation()},
+            df: { fieldtype: 'Link', options: 'Warehouse', fieldname: 'warehouse', label: 'Warehouse', reqd: 1, onchange: () => this.schedule_live_calculation() },
             render_input: true
         });
 
@@ -322,7 +322,7 @@ class PharmaQuickSalePage {
         });
     }
 
-    add_row(prefill={}) {
+    add_row(prefill = {}) {
         const row_id = prefill.row_id || frappe.utils.get_random(8);
         const row = $(`
             <tr data-row="${row_id}">
@@ -348,9 +348,9 @@ class PharmaQuickSalePage {
         const item_control = frappe.ui.form.make_control({
             parent: row.find('.item-control'),
             df: {
-                fieldtype:'Link',
-                options:'Item',
-                fieldname:'item_code',
+                fieldtype: 'Link',
+                options: 'Item',
+                fieldname: 'item_code',
                 onchange: () => this.load_price_lookup(row)
             },
             render_input: true
@@ -435,7 +435,7 @@ class PharmaQuickSalePage {
 
         frappe.call({
             method: 'pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.allocate_fefo',
-            args: {item_code, warehouse, qty},
+            args: { item_code, warehouse, qty },
             freeze: true,
             freeze_message: 'Allocating FEFO batches...',
             callback: (r) => {
@@ -471,7 +471,7 @@ class PharmaQuickSalePage {
     // manual_batch_dialog(row) {
     //     // 1. Extract the item code from the row (adjust the selector/data key based on your HTML structure)
     //     let item_code = this.get_item_code(row); 
-    
+
     //     let d = new frappe.ui.Dialog({
     //         title: 'Add Batch',
     //         fields: [
@@ -509,23 +509,23 @@ class PharmaQuickSalePage {
     manual_batch_dialog(row) {
 
         const item_code = this.get_item_code(row);
-    
+
         if (!item_code) {
             frappe.msgprint(__('Please select item first'));
             return;
         }
-    
+
         const warehouse = this.warehouse.get_value();
-    
+
         if (!warehouse) {
             frappe.msgprint(__('Please select warehouse first'));
             return;
         }
-    
+
         const qty =
             flt(row.find('.qty').val()) +
             flt(row.find('.free-qty').val());
-    
+
         if (!qty || qty <= 0) {
             frappe.msgprint(__('Please enter qty first'));
             return;
@@ -533,9 +533,9 @@ class PharmaQuickSalePage {
 
         const temp_name = frappe.utils.get_random(10);
         const temp_name_ = frappe.utils.get_random(10);
-    
+
         // create item object exactly like ERPNext child row
-    
+
         let item = {
             doctype: "Pharma Quick Sale Item",
             name: temp_name_,
@@ -555,9 +555,9 @@ class PharmaQuickSalePage {
             voucher_type: "Pharma Quick Sale",
             voucher_no: temp_name
         };
-    
+
         // fake frm object required by ERPNext selector
-    
+
         let frm = {
             doc: {
                 doctype: "Pharma Quick Sale",
@@ -566,59 +566,75 @@ class PharmaQuickSalePage {
                 posting_date: $('#pqs-posting-date').val(),
                 set_warehouse: warehouse
             },
-        
+
             fields_dict: {},
             script_manager: {
-                trigger() {}
+                trigger() { }
             },
-        
-            refresh_field() {}
+
+            save: async () => {
+                return Promise.resolve();
+            },
+
+            refresh_field() { }
         };
-    
+
         // open native ERPNext selector
-    
-        new erpnext.SerialBatchPackageSelector(frm, item, (r) => {
-    
+
+        new erpnext.SerialBatchPackageSelector(frm, item, async (r) => {
+
             if (!r) return;
-    
+
             // save bundle name
-    
+
+            let bundle = await frappe.db.get_doc(
+                "Serial and Batch Bundle",
+                r.name
+            );
+            
+            if (bundle.docstatus === 0) {
+            
+                await frappe.call({
+                    method: "frappe.client.submit",
+                    args: {
+                        doc: bundle
+                    }
+                });
+            }
+
+
             row.data(
                 'serial_and_batch_bundle',
                 r.name
             );
-    
+
             // fetch selected batches from bundle
-    
-            frappe.call({
-                method: "frappe.client.get",
-                args: {
-                    doctype: "Serial and Batch Bundle",
-                    name: r.name
-                },
-    
-                callback: (res) => {
-    
-                    let doc = res.message || {};
-    
-                    // save entries locally
-    
-                    row.data(
-                        'serial_and_batch_bundle',
-                        r.name
-                    );
-                    
-                    this.render_bundle(row);
-    
-                    frappe.show_alert({
-                        message: __('Batch Selected Successfully'),
-                        indicator: 'green'
-                    });
-    
-                    this.schedule_live_calculation();
-                }
+
+            // frappe.call({
+            //     method: "frappe.client.get",
+            //     args: {
+            //         doctype: "Serial and Batch Bundle",
+            //         name: r.name
+            //     },
+
+            //     callback: (res) => {
+
+            //         let doc = res.message || {};
+
+            //         // save entries locally
+
+
+            this.render_bundle(row);
+
+            frappe.show_alert({
+                message: __('Batch Selected Successfully'),
+                indicator: 'green'
             });
-    
+
+            this.schedule_live_calculation();
+            //     }
+            // });
+
         });
     }
 
@@ -640,13 +656,13 @@ class PharmaQuickSalePage {
     render_batches(row) {
 
         const batches = row.data('serial_and_batch_bundle') || [];
-    
+
         let html = batches.map(b => {
-    
+
             let expiry = b.expiry_date
                 ? ` | Exp: ${frappe.datetime.str_to_user(b.expiry_date)}`
                 : '';
-    
+
             return `
                 <span class="pqs-batch-chip good">
                     ${b.batch_no || b.serial_no}
@@ -654,9 +670,9 @@ class PharmaQuickSalePage {
                     ${expiry}
                 </span>
             `;
-    
+
         }).join('');
-    
+
         row.find('.batch-display').html(
             html || '<span class="pqs-muted">No batch selected</span>'
         );
@@ -666,16 +682,16 @@ class PharmaQuickSalePage {
 
         const bundle =
             row.data('serial_and_batch_bundle');
-    
+
         if (!bundle) {
-    
+
             row.find('.batch-display').html(
                 '<span class="pqs-muted">No Bundle Selected</span>'
             );
-    
+
             return;
         }
-    
+
         row.find('.batch-display').html(`
             <span class="pqs-batch-chip good">
                 Bundle: ${bundle}
@@ -724,7 +740,7 @@ class PharmaQuickSalePage {
 
         frappe.call({
             method: 'pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.get_last_sales',
-            args: {customer},
+            args: { customer },
             callback: (r) => {
                 const rows = (r.message || []).map(x => `<tr><td>${x.posting_date}</td><td>${x.item_code}</td><td>${x.qty}</td><td>${x.rate}</td></tr>`).join('');
                 frappe.msgprint(`<table class="table table-bordered"><tr><th>Date</th><th>Item</th><th>Qty</th><th>Rate</th></tr>${rows || '<tr><td colspan="4">No history</td></tr>'}</table>`);
@@ -741,7 +757,7 @@ class PharmaQuickSalePage {
 
         frappe.call({
             method: 'pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.get_last_sales',
-            args: {customer, limit: 20},
+            args: { customer, limit: 20 },
             freeze: true,
             freeze_message: 'Loading last order...',
             callback: (r) => {
@@ -777,7 +793,7 @@ class PharmaQuickSalePage {
     show_expiry_dashboard() {
         frappe.call({
             method: 'pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.get_expiry_dashboard',
-            args: {warehouse: this.warehouse.get_value(), days: 180},
+            args: { warehouse: this.warehouse.get_value(), days: 180 },
             callback: (r) => {
                 const rows = (r.message || []).map(x => `<tr><td>${x.item_code}</td><td>${x.batch_no}</td><td>${x.expiry_date}</td><td>${x.qty}</td><td>${x.days_to_expiry}</td></tr>`).join('');
                 frappe.msgprint(`<table class="table table-bordered"><tr><th>Item</th><th>Batch</th><th>Expiry</th><th>Qty</th><th>Days</th></tr>${rows || '<tr><td colspan="5">No expiring batches</td></tr>'}</table>`);
@@ -799,7 +815,7 @@ class PharmaQuickSalePage {
             },
             callback: (r) => {
                 const d = r.message;
-                this.add_row({item_code: d.item_code, rate: d.price || 0});
+                this.add_row({ item_code: d.item_code, rate: d.price || 0 });
                 this.update_intelligence_panel(d);
                 $('#pqs-barcode').val('').focus();
             }
@@ -823,7 +839,7 @@ class PharmaQuickSalePage {
                 discount_percentage: flt(row.find('.discount').val()),
                 qty: flt(row.find('.qty').val()),
                 free_qty: flt(row.find('.free-qty').val()),
-            
+
                 serial_and_batch_bundle:
                     row.data('serial_and_batch_bundle')
             });
@@ -861,7 +877,7 @@ class PharmaQuickSalePage {
 
         frappe.call({
             method: 'pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.create_quick_sale',
-            args: {data, action},
+            args: { data, action },
             freeze: true,
             freeze_message: 'Creating document...',
             callback: (r) => {
@@ -899,7 +915,7 @@ class PharmaQuickSalePage {
 
         frappe.call({
             method: 'pharma_management.pharma_quick_sale.doctype.pharma_quick_sale.pharma_quick_sale.get_live_sales_totals',
-            args: {data},
+            args: { data },
             callback: (r) => {
                 const d = r.message || {};
                 this.update_totals_display(d.net_total, d.total_taxes_and_charges, d.grand_total, d.taxes || []);

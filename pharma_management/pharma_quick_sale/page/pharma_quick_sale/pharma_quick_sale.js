@@ -530,48 +530,48 @@ class PharmaQuickSalePage {
             frappe.msgprint(__('Please enter qty first'));
             return;
         }
+
+        const temp_name = frappe.utils.get_random(10);
+        const temp_name_ = frappe.utils.get_random(10);
     
         // create item object exactly like ERPNext child row
     
         let item = {
-            doctype: "Sales Invoice Item",
-            name: frappe.utils.get_random(10),
-    
+            doctype: "Pharma Quick Sale Item",
+            name: temp_name_,
+            parent: temp_name,
+            parenttype: "Pharma Quick Sale",
             item_code: item_code,
-    
             warehouse: warehouse,
-    
             qty: qty,
             stock_qty: qty,
-    
             conversion_factor: 1,
-    
             serial_and_batch_bundle: "",
-    
             use_serial_batch_fields: 1,
-    
             has_batch_no: 1,
             has_serial_no: 0,
-    
             type_of_transaction: "Outward",
-    
-            company: this.company.get_value()
+            company: this.company.get_value(),
+            voucher_type: "Pharma Quick Sale",
+            voucher_no: temp_name
         };
     
         // fake frm object required by ERPNext selector
     
         let frm = {
             doc: {
+                doctype: "Pharma Quick Sale",
+                name: temp_name,
                 company: this.company.get_value(),
                 posting_date: $('#pqs-posting-date').val(),
+                set_warehouse: warehouse
             },
-    
+        
             fields_dict: {},
-    
             script_manager: {
                 trigger() {}
             },
-    
+        
             refresh_field() {}
         };
     

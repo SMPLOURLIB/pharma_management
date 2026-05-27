@@ -524,7 +524,7 @@ class PharmaQuickSalePage {
 
         const qty =
             flt(row.find('.qty').val()) +
-            flt(row.find('.free-qty').val());
+            flt(row.find('.free_qty').val());
 
         if (!qty || qty <= 0) {
             frappe.msgprint(__('Please enter qty first'));

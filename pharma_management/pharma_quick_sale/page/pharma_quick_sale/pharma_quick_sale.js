@@ -594,12 +594,12 @@ class PharmaQuickSalePage {
             
             if (bundle.docstatus === 0) {
             
-                await frappe.call({
-                    method: "frappe.client.submit",
-                    args: {
-                        doc: bundle
-                    }
-                });
+                // await frappe.call({
+                //     method: "frappe.client.submit",
+                //     args: {
+                //         doc: bundle
+                //     }
+                // });
             }
 
 

@@ -469,12 +469,29 @@ class PharmaQuickSalePage {
     }
 
     manual_batch_dialog(row) {
+        // 1. Extract the item code from the row (adjust the selector/data key based on your HTML structure)
+        let item_code = row.data('item_code') || row.find('.item-code').val(); 
+    
         let d = new frappe.ui.Dialog({
             title: 'Add Batch',
             fields: [
-                {fieldname:'batch_no', fieldtype:'Link', options:'Batch', label:'Batch', reqd:1},
-                {fieldname:'qty', fieldtype:'Float', label:'Qty', default: flt(row.find('.qty').val())},
-                {fieldname:'free_qty', fieldtype:'Float', label:'Free Qty', default: flt(row.find('.free-qty').val())}
+                {
+                    fieldname: 'batch_no', 
+                    fieldtype: 'Link', 
+                    options: 'Batch', 
+                    label: 'Batch', 
+                    reqd: 1,
+                    // 2. Pass the filter directly into the field definition
+                    get_query: () => {
+                        return {
+                            filters: {
+                                'item': item_code
+                            }
+                        };
+                    }
+                },
+                {fieldname: 'qty', fieldtype: 'Float', label: 'Qty', default: flt(row.find('.qty').val())},
+                {fieldname: 'free_qty', fieldtype: 'Float', label: 'Free Qty', default: flt(row.find('.free-qty').val())}
             ],
             primary_action_label: 'Add',
             primary_action: (values) => {

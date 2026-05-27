@@ -1223,19 +1223,12 @@ def _get_item_tax_template_accounts(item_tax_template):
 
 
 def _ensure_tax_rows_for_live_item_tax_templates(invoice):
-    """Ensure tax rows exist for item-wise tax calculation.
-
-    ERPNext item tax templates override rates on tax accounts, but tax rows must
-    still exist on the Sales Invoice. If no Sales Taxes and Charges Template is
-    applied, this creates one tax row per account used by the item tax templates.
+    """Ensure tax rows exist for item-wise tax calculation and explicitly
+    assigns rates to matching tax accounts from Item Tax templates.
     """
-    existing_accounts = set()
-    for tax in invoice.taxes:
-        if getattr(tax, "account_head", None):
-            existing_accounts.add(tax.account_head)
-
     account_rates = {}
 
+    # 1. Map out all required accounts and rates from the items' templates
     for item in invoice.items:
         item_tax_template = getattr(item, "item_tax_template", None)
         if not item_tax_template:
@@ -1246,11 +1239,19 @@ def _ensure_tax_rows_for_live_item_tax_templates(invoice):
             if not account_head:
                 continue
 
-            # Use the actual rate as default; ERPNext may override item-wise.
+            # Keep the rate defined in the item tax template
             account_rates[account_head] = flt(row.get("rate"))
 
+    # 2. Update rates for rows that ALREADY exist in invoice.taxes
+    updated_accounts = set()
+    for tax in invoice.taxes:
+        if tax.account_head in account_rates:
+            tax.rate = account_rates[tax.account_head]
+            updated_accounts.add(tax.account_head)
+
+    # 3. Only append if the account doesn't exist in the tax table at all
     for account_head, rate in account_rates.items():
-        if account_head in existing_accounts:
+        if account_head in updated_accounts:
             continue
 
         invoice.append("taxes", {
@@ -1259,7 +1260,6 @@ def _ensure_tax_rows_for_live_item_tax_templates(invoice):
             "description": account_head,
             "rate": rate
         })
-
 
 @frappe.whitelist()
 def get_live_sales_totals(data):

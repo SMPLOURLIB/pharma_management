@@ -511,7 +511,7 @@ class PharmaQuickSalePage {
         const item_code = this.get_item_code(row);
     
         if (!item_code) {
-            frappe.msgprint(__('Please select item first'));
+            frappe.msgprint(__('Select Item First'));
             return;
         }
     
@@ -521,82 +521,87 @@ class PharmaQuickSalePage {
     
         const warehouse = this.warehouse.get_value();
     
-        if (!warehouse) {
-            frappe.msgprint(__('Please select warehouse'));
-            return;
-        }
+        let child = {
+            doctype: "Sales Invoice Item",
+            name: frappe.utils.get_random(10),
+            parent: "New Sales Invoice 1",
+            parenttype: "Sales Invoice",
     
-        // fake frm object (required by ERPNext selector)
+            item_code: item_code,
+    
+            qty: qty,
+            stock_qty: qty,
+    
+            conversion_factor: 1,
+    
+            uom: "Nos",
+            stock_uom: "Nos",
+    
+            warehouse: warehouse,
+    
+            serial_no: "",
+            batch_no: "",
+    
+            serial_and_batch_bundle: "",
+    
+            has_batch_no: 1,
+            has_serial_no: 0,
+    
+            use_serial_batch_fields: 1
+        };
+    
         let frm = {
             doc: {
                 company: this.company.get_value(),
                 posting_date: $('#pqs-posting-date').val(),
                 set_warehouse: warehouse,
-                items: []
+                items: [child]
             },
+    
             fields_dict: {},
+    
             script_manager: {
                 trigger: function() {}
             },
-            refresh_field: function() {}
-        };
     
-        // child row object
-        let child = {
-            item_code: item_code,
-            warehouse: warehouse,
-            qty: qty,
-            stock_qty: qty,
-            conversion_factor: 1,
-            use_serial_batch_fields: 1,
-            serial_and_batch_bundle: '',
-            batch_no: '',
-            serial_no: ''
+            refresh_field: function() {}
         };
     
         new erpnext.SerialBatchPackageSelector({
             frm: frm,
             child: child,
+    
             warehouse_details: {
                 type: "Warehouse",
                 name: warehouse
             },
-            callback: (r) => {
     
-                console.log("Selected Bundle", child);
+            callback: () => {
     
-                // SAVE selected batches into your custom structure
+                row.data(
+                    'serial_and_batch_bundle',
+                    child.serial_and_batch_bundle
+                );
     
-                let allocations = [];
+                frappe.call({
+                    method: "frappe.client.get",
+                    args: {
+                        doctype: "Serial and Batch Bundle",
+                        name: child.serial_and_batch_bundle
+                    },
     
-                if (child.serial_and_batch_bundle) {
+                    callback: (r) => {
     
-                    frappe.call({
-                        method: "erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle.get_bundle_entries",
-                        args: {
-                            bundle: child.serial_and_batch_bundle
-                        },
-                        callback: (res) => {
+                        let doc = r.message;
     
-                            (res.message || []).forEach(d => {
+                        row.data(
+                            'batch_rows',
+                            doc.entries || []
+                        );
     
-                                allocations.push({
-                                    batch_no: d.batch_no,
-                                    qty: d.qty,
-                                    free_qty: 0,
-                                    expiry_date: d.expiry_date
-                                });
-    
-                            });
-    
-                            row.data('batch_rows', allocations);
-    
-                            this.render_batches(row);
-    
-                            this.schedule_live_calculation();
-                        }
-                    });
-                }
+                        this.render_batches(row);
+                    }
+                });
             }
         });
     }

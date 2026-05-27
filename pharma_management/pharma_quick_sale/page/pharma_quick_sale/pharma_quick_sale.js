@@ -15,6 +15,18 @@ class PharmaQuickSalePage {
     }
 
     make() {
+
+        this.frm = {
+            doc: {
+                company: this.company ? this.company.get_value() : frappe.defaults.get_default('company'),
+                warehouse: this.warehouse ? this.warehouse.get_value() : ""
+            },
+            script_manager: {
+                trigger: () => {} // Prevents crashes if the picker calls field events
+            }
+        };
+
+        
         this.page.body.html(this.get_html());
         this.add_css();
         this.make_controls();
@@ -468,55 +480,109 @@ class PharmaQuickSalePage {
         });
     }
 
+    // manual_batch_dialog(row) {
+    //     let item_code = this.get_item_code(row); 
+    //     let warehouse = this.warehouse.get_value();
+    //     let qty = flt(row.find('.qty').val()) + flt(row.find('.free-qty').val()); // Total stock physical rows needed
+
+    //     if (!item_code || !warehouse || qty <= 0) {
+    //         frappe.msgprint(__('Please select Item, Warehouse, and enter a valid Qty first.'));
+    //         return;
+    //     }
+
+    //     // Initialize ERPNext native dialog picker class
+    //     let selector = new erpnext.stock.SerialNoBatchNoSelector({
+    //         frm: this, // Pass the current page object context
+    //         item_code: item_code,
+    //         warehouse: warehouse,
+    //         qty: qty,
+    //         type_of_transaction: "Delivery Note", // Ensures validation of outgoing stock batches
+            
+    //         // Re-open selector with previously picked bundle ID if user clicks a second time
+    //         serial_and_batch_bundle: row.data('serial_and_batch_bundle') || "",
+
+    //         callback: (bundle_response) => {
+    //             if (bundle_response && bundle_response.name) {
+    //                 // 1. Store the overarching Bundle Name (e.g., 'SBB-00041') onto the row data
+    //                 row.data('serial_and_batch_bundle', bundle_response.name);
+
+    //                 // 2. Query internal components to populate the visual chips on your page
+    //                 frappe.db.get_all('Serial and Batch Entry', {
+    //                     filters: { parent: bundle_response.name },
+    //                     fields: ['batch_no', 'qty', 'expiry_date']
+    //                 }).then(entries => {
+    //                     let batches = entries.map(entry => ({
+    //                         batch_no: entry.batch_no,
+    //                         qty: entry.qty,
+    //                         free_qty: 0, // Native picker groups all quantities together
+    //                         expiry_date: entry.expiry_date
+    //                     }));
+
+    //                     row.data('batch_rows', batches);
+                        
+    //                     // Refreshes ui elements and updates backend calculation
+    //                     this.render_batches(row);
+    //                     this.schedule_live_calculation();
+    //                 });
+    //             }
+    //         }
+    //     });
+
+    //     selector.show();
+    // }
+
     manual_batch_dialog(row) {
         let item_code = this.get_item_code(row); 
         let warehouse = this.warehouse.get_value();
-        let qty = flt(row.find('.qty').val()) + flt(row.find('.free-qty').val()); // Total stock physical rows needed
+        let qty = flt(row.find('.qty').val()) + flt(row.find('.free-qty').val());
 
         if (!item_code || !warehouse || qty <= 0) {
             frappe.msgprint(__('Please select Item, Warehouse, and enter a valid Qty first.'));
             return;
         }
 
-        // Initialize ERPNext native dialog picker class
-        let selector = new erpnext.stock.SerialNoBatchNoSelector({
-            frm: this, // Pass the current page object context
-            item_code: item_code,
-            warehouse: warehouse,
-            qty: qty,
-            type_of_transaction: "Delivery Note", // Ensures validation of outgoing stock batches
+        // --- FIX: Dynamically load the ERPNext stock controllers script ---
+        frappe.require('assets/erpnext/js/stock/stock_controller.js', () => {
             
-            // Re-open selector with previously picked bundle ID if user clicks a second time
-            serial_and_batch_bundle: row.data('serial_and_batch_bundle') || "",
-
-            callback: (bundle_response) => {
-                if (bundle_response && bundle_response.name) {
-                    // 1. Store the overarching Bundle Name (e.g., 'SBB-00041') onto the row data
-                    row.data('serial_and_batch_bundle', bundle_response.name);
-
-                    // 2. Query internal components to populate the visual chips on your page
-                    frappe.db.get_all('Serial and Batch Entry', {
-                        filters: { parent: bundle_response.name },
-                        fields: ['batch_no', 'qty', 'expiry_date']
-                    }).then(entries => {
-                        let batches = entries.map(entry => ({
-                            batch_no: entry.batch_no,
-                            qty: entry.qty,
-                            free_qty: 0, // Native picker groups all quantities together
-                            expiry_date: entry.expiry_date
-                        }));
-
-                        row.data('batch_rows', batches);
-                        
-                        // Refreshes ui elements and updates backend calculation
-                        this.render_batches(row);
-                        this.schedule_live_calculation();
-                    });
-                }
+            // Double check to ensure it loaded correctly into global namespace
+            if (!erpnext.stock.SerialNoBatchNoSelector) {
+                frappe.msgprint(__('Unable to load Serial & Batch Selector component.'));
+                return;
             }
-        });
 
-        selector.show();
+            let selector = new erpnext.stock.SerialNoBatchNoSelector({
+                frm: this, 
+                item_code: item_code,
+                warehouse: warehouse,
+                qty: qty,
+                type_of_transaction: "Delivery Note",
+                serial_and_batch_bundle: row.data('serial_and_batch_bundle') || "",
+
+                callback: (bundle_response) => {
+                    if (bundle_response && bundle_response.name) {
+                        row.data('serial_and_batch_bundle', bundle_response.name);
+
+                        frappe.db.get_all('Serial and Batch Entry', {
+                            filters: { parent: bundle_response.name },
+                            fields: ['batch_no', 'qty', 'expiry_date']
+                        }).then(entries => {
+                            let batches = entries.map(entry => ({
+                                batch_no: entry.batch_no,
+                                qty: entry.qty,
+                                free_qty: 0,
+                                expiry_date: entry.expiry_date
+                            }));
+
+                            row.data('batch_rows', batches);
+                            this.render_batches(row);
+                            this.schedule_live_calculation();
+                        });
+                    }
+                }
+            });
+
+            selector.show();
+        });
     }
 
     render_batches(row) {

@@ -470,7 +470,7 @@ class PharmaQuickSalePage {
 
     manual_batch_dialog(row) {
         // 1. Extract the item code from the row (adjust the selector/data key based on your HTML structure)
-        let item_code = row.data('item_code') || row.find('.item-code').val(); 
+        let item_code = this.get_item_code(row); 
     
         let d = new frappe.ui.Dialog({
             title: 'Add Batch',
@@ -481,9 +481,6 @@ class PharmaQuickSalePage {
                     options: 'Batch', 
                     label: 'Batch', 
                     reqd: 1,
-                    filters: {
-                        'item': item_code
-                    },
                     // 2. Pass the filter directly into the field definition
                     get_query: () => {
                         return {

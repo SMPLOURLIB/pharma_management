@@ -824,21 +824,20 @@ class PharmaQuickSalePage {
                 qty: flt(row.find('.qty').val()),
                 free_qty: flt(row.find('.free-qty').val()),
 
-                serial_and_batch_bundle:
-                    row.data('serial_and_batch_bundle')
+                serial_and_batch_bundle: row.data('serial_and_batch_bundle')
             });
 
-            (row.data('batch_rows') || []).forEach(b => {
-                batch_allocations.push({
-                    item_row_id: row_id,
-                    item_code,
-                    batch_no: b.batch_no,
-                    expiry_date: b.expiry_date,
-                    available_qty: b.available_qty,
-                    qty: flt(b.qty),
-                    free_qty: flt(b.free_qty)
-                });
-            });
+            // (row.data('batch_rows') || []).forEach(b => {
+            //     batch_allocations.push({
+            //         item_row_id: row_id,
+            //         item_code,
+            //         batch_no: b.batch_no,
+            //         expiry_date: b.expiry_date,
+            //         available_qty: b.available_qty,
+            //         qty: flt(b.qty),
+            //         free_qty: flt(b.free_qty)
+            //     });
+            // });
         });
 
         return {

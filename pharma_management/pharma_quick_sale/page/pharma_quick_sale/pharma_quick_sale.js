@@ -481,6 +481,9 @@ class PharmaQuickSalePage {
                     options: 'Batch', 
                     label: 'Batch', 
                     reqd: 1,
+                    filters: {
+                        'item': item_code
+                    },
                     // 2. Pass the filter directly into the field definition
                     get_query: () => {
                         return {

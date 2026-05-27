@@ -15,18 +15,6 @@ class PharmaQuickSalePage {
     }
 
     make() {
-
-        this.frm = {
-            doc: {
-                company: this.company ? this.company.get_value() : frappe.defaults.get_default('company'),
-                warehouse: this.warehouse ? this.warehouse.get_value() : ""
-            },
-            script_manager: {
-                trigger: () => {} // Prevents crashes if the picker calls field events
-            }
-        };
-
-        
         this.page.body.html(this.get_html());
         this.add_css();
         this.make_controls();
@@ -481,107 +469,135 @@ class PharmaQuickSalePage {
     }
 
     // manual_batch_dialog(row) {
+    //     // 1. Extract the item code from the row (adjust the selector/data key based on your HTML structure)
     //     let item_code = this.get_item_code(row); 
-    //     let warehouse = this.warehouse.get_value();
-    //     let qty = flt(row.find('.qty').val()) + flt(row.find('.free-qty').val()); // Total stock physical rows needed
-
-    //     if (!item_code || !warehouse || qty <= 0) {
-    //         frappe.msgprint(__('Please select Item, Warehouse, and enter a valid Qty first.'));
-    //         return;
-    //     }
-
-    //     // Initialize ERPNext native dialog picker class
-    //     let selector = new erpnext.stock.SerialNoBatchNoSelector({
-    //         frm: this, // Pass the current page object context
-    //         item_code: item_code,
-    //         warehouse: warehouse,
-    //         qty: qty,
-    //         type_of_transaction: "Delivery Note", // Ensures validation of outgoing stock batches
-            
-    //         // Re-open selector with previously picked bundle ID if user clicks a second time
-    //         serial_and_batch_bundle: row.data('serial_and_batch_bundle') || "",
-
-    //         callback: (bundle_response) => {
-    //             if (bundle_response && bundle_response.name) {
-    //                 // 1. Store the overarching Bundle Name (e.g., 'SBB-00041') onto the row data
-    //                 row.data('serial_and_batch_bundle', bundle_response.name);
-
-    //                 // 2. Query internal components to populate the visual chips on your page
-    //                 frappe.db.get_all('Serial and Batch Entry', {
-    //                     filters: { parent: bundle_response.name },
-    //                     fields: ['batch_no', 'qty', 'expiry_date']
-    //                 }).then(entries => {
-    //                     let batches = entries.map(entry => ({
-    //                         batch_no: entry.batch_no,
-    //                         qty: entry.qty,
-    //                         free_qty: 0, // Native picker groups all quantities together
-    //                         expiry_date: entry.expiry_date
-    //                     }));
-
-    //                     row.data('batch_rows', batches);
-                        
-    //                     // Refreshes ui elements and updates backend calculation
-    //                     this.render_batches(row);
-    //                     this.schedule_live_calculation();
-    //                 });
-    //             }
+    
+    //     let d = new frappe.ui.Dialog({
+    //         title: 'Add Batch',
+    //         fields: [
+    //             {
+    //                 fieldname: 'batch_no', 
+    //                 fieldtype: 'Link', 
+    //                 options: 'Batch', 
+    //                 label: 'Batch', 
+    //                 reqd: 1,
+    //                 // 2. Pass the filter directly into the field definition
+    //                 get_query: () => {
+    //                     return {
+    //                         filters: {
+    //                             'item': item_code
+    //                         }
+    //                     };
+    //                 }
+    //             },
+    //             {fieldname: 'qty', fieldtype: 'Float', label: 'Qty', default: flt(row.find('.qty').val())},
+    //             {fieldname: 'free_qty', fieldtype: 'Float', label: 'Free Qty', default: flt(row.find('.free-qty').val())}
+    //         ],
+    //         primary_action_label: 'Add',
+    //         primary_action: (values) => {
+    //             let batches = row.data('batch_rows') || [];
+    //             batches.push(values);
+    //             row.data('batch_rows', batches);
+    //             this.render_batches(row);
+    //             this.schedule_live_calculation();
+    //             d.hide();
     //         }
     //     });
-
-    //     selector.show();
+    //     d.show();
     // }
 
     manual_batch_dialog(row) {
-        let item_code = this.get_item_code(row); 
-        let warehouse = this.warehouse.get_value();
-        let qty = flt(row.find('.qty').val()) + flt(row.find('.free-qty').val());
 
-        if (!item_code || !warehouse || qty <= 0) {
-            frappe.msgprint(__('Please select Item, Warehouse, and enter a valid Qty first.'));
+        const item_code = this.get_item_code(row);
+    
+        if (!item_code) {
+            frappe.msgprint(__('Please select item first'));
             return;
         }
-
-        // --- FIX: Dynamically load the ERPNext stock controllers script ---
-        frappe.require('assets/erpnext/js/stock/stock_controller.js', () => {
-            
-            // Double check to ensure it loaded correctly into global namespace
-            if (!erpnext.stock.SerialNoBatchNoSelector) {
-                frappe.msgprint(__('Unable to load Serial & Batch Selector component.'));
-                return;
-            }
-
-            let selector = new erpnext.stock.SerialNoBatchNoSelector({
-                frm: this, 
-                item_code: item_code,
-                warehouse: warehouse,
-                qty: qty,
-                type_of_transaction: "Delivery Note",
-                serial_and_batch_bundle: row.data('serial_and_batch_bundle') || "",
-
-                callback: (bundle_response) => {
-                    if (bundle_response && bundle_response.name) {
-                        row.data('serial_and_batch_bundle', bundle_response.name);
-
-                        frappe.db.get_all('Serial and Batch Entry', {
-                            filters: { parent: bundle_response.name },
-                            fields: ['batch_no', 'qty', 'expiry_date']
-                        }).then(entries => {
-                            let batches = entries.map(entry => ({
-                                batch_no: entry.batch_no,
-                                qty: entry.qty,
-                                free_qty: 0,
-                                expiry_date: entry.expiry_date
-                            }));
-
-                            row.data('batch_rows', batches);
+    
+        const qty =
+            flt(row.find('.qty').val()) +
+            flt(row.find('.free-qty').val());
+    
+        const warehouse = this.warehouse.get_value();
+    
+        if (!warehouse) {
+            frappe.msgprint(__('Please select warehouse'));
+            return;
+        }
+    
+        // fake frm object (required by ERPNext selector)
+        let frm = {
+            doc: {
+                company: this.company.get_value(),
+                posting_date: $('#pqs-posting-date').val(),
+                set_warehouse: warehouse,
+                items: []
+            },
+            fields_dict: {},
+            script_manager: {
+                trigger: function() {}
+            },
+            refresh_field: function() {}
+        };
+    
+        // child row object
+        let child = {
+            item_code: item_code,
+            warehouse: warehouse,
+            qty: qty,
+            stock_qty: qty,
+            conversion_factor: 1,
+            use_serial_batch_fields: 1,
+            serial_and_batch_bundle: '',
+            batch_no: '',
+            serial_no: ''
+        };
+    
+        new erpnext.SerialBatchPackageSelector({
+            frm: frm,
+            child: child,
+            warehouse_details: {
+                type: "Warehouse",
+                name: warehouse
+            },
+            callback: (r) => {
+    
+                console.log("Selected Bundle", child);
+    
+                // SAVE selected batches into your custom structure
+    
+                let allocations = [];
+    
+                if (child.serial_and_batch_bundle) {
+    
+                    frappe.call({
+                        method: "erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle.get_bundle_entries",
+                        args: {
+                            bundle: child.serial_and_batch_bundle
+                        },
+                        callback: (res) => {
+    
+                            (res.message || []).forEach(d => {
+    
+                                allocations.push({
+                                    batch_no: d.batch_no,
+                                    qty: d.qty,
+                                    free_qty: 0,
+                                    expiry_date: d.expiry_date
+                                });
+    
+                            });
+    
+                            row.data('batch_rows', allocations);
+    
                             this.render_batches(row);
+    
                             this.schedule_live_calculation();
-                        });
-                    }
+                        }
+                    });
                 }
-            });
-
-            selector.show();
+            }
         });
     }
 
@@ -722,50 +738,6 @@ class PharmaQuickSalePage {
         });
     }
 
-    // collect_data() {
-    //     let items = [];
-    //     let batch_allocations = [];
-
-    //     $('#pqs-items tr').each((i, el) => {
-    //         const row = $(el);
-    //         const row_id = row.data('row_id');
-    //         const item_code = this.get_item_code(row);
-    //         if (!item_code) return;
-
-    //         items.push({
-    //             row_id,
-    //             item_code,
-    //             rate: flt(row.find('.rate').val()),
-    //             discount_percentage: flt(row.find('.discount').val()),
-    //             qty: flt(row.find('.qty').val()),
-    //             free_qty: flt(row.find('.free-qty').val())
-    //         });
-
-    //         (row.data('batch_rows') || []).forEach(b => {
-    //             batch_allocations.push({
-    //                 item_row_id: row_id,
-    //                 item_code,
-    //                 batch_no: b.batch_no,
-    //                 expiry_date: b.expiry_date,
-    //                 available_qty: b.available_qty,
-    //                 qty: flt(b.qty),
-    //                 free_qty: flt(b.free_qty)
-    //             });
-    //         });
-    //     });
-
-    //     return {
-    //         customer: this.customer.get_value(),
-    //         company: this.company.get_value(),
-    //         warehouse: this.warehouse.get_value(),
-    //         posting_date: $('#pqs-posting-date').val(),
-    //         price_list: 'Standard Selling',
-    //         items,
-    //         batch_allocations
-    //     };
-    // }
-
-
     collect_data() {
         let items = [];
         let batch_allocations = [];
@@ -782,19 +754,16 @@ class PharmaQuickSalePage {
                 rate: flt(row.find('.rate').val()),
                 discount_percentage: flt(row.find('.discount').val()),
                 qty: flt(row.find('.qty').val()),
-                free_qty: flt(row.find('.free-qty').val()),
-                
-                // --- ADD THIS LINE TO ATTACH BUNDLE TO SELLING LINE ROW ---
-                serial_and_batch_bundle: row.data('serial_and_batch_bundle') || ""
+                free_qty: flt(row.find('.free-qty').val())
             });
 
-            // Keep this block active if you still rely on it for structural UI mappings
             (row.data('batch_rows') || []).forEach(b => {
                 batch_allocations.push({
                     item_row_id: row_id,
                     item_code,
                     batch_no: b.batch_no,
                     expiry_date: b.expiry_date,
+                    available_qty: b.available_qty,
                     qty: flt(b.qty),
                     free_qty: flt(b.free_qty)
                 });

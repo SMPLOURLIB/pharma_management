@@ -511,7 +511,14 @@ class PharmaQuickSalePage {
         const item_code = this.get_item_code(row);
     
         if (!item_code) {
-            frappe.msgprint(__('Select Item First'));
+            frappe.msgprint(__('Please select item first'));
+            return;
+        }
+    
+        const warehouse = this.warehouse.get_value();
+    
+        if (!warehouse) {
+            frappe.msgprint(__('Please select warehouse first'));
             return;
         }
     
@@ -519,105 +526,142 @@ class PharmaQuickSalePage {
             flt(row.find('.qty').val()) +
             flt(row.find('.free-qty').val());
     
-        const warehouse = this.warehouse.get_value();
+        if (!qty || qty <= 0) {
+            frappe.msgprint(__('Please enter qty first'));
+            return;
+        }
     
-        let child = {
+        // create item object exactly like ERPNext child row
+    
+        let item = {
             doctype: "Sales Invoice Item",
             name: frappe.utils.get_random(10),
-            parent: "New Sales Invoice 1",
-            parenttype: "Sales Invoice",
     
             item_code: item_code,
+    
+            warehouse: warehouse,
     
             qty: qty,
             stock_qty: qty,
     
             conversion_factor: 1,
     
-            uom: "Nos",
-            stock_uom: "Nos",
-    
-            warehouse: warehouse,
-    
-            serial_no: "",
-            batch_no: "",
-    
             serial_and_batch_bundle: "",
+    
+            use_serial_batch_fields: 1,
     
             has_batch_no: 1,
             has_serial_no: 0,
     
-            use_serial_batch_fields: 1
+            type_of_transaction: "Outward",
+    
+            company: this.company.get_value()
         };
+    
+        // fake frm object required by ERPNext selector
     
         let frm = {
             doc: {
                 company: this.company.get_value(),
                 posting_date: $('#pqs-posting-date').val(),
-                set_warehouse: warehouse,
-                items: [child]
             },
     
             fields_dict: {},
     
             script_manager: {
-                trigger: function() {}
+                trigger() {}
             },
     
-            refresh_field: function() {}
+            refresh_field() {}
         };
     
-        new erpnext.SerialBatchPackageSelector({
-            frm: frm,
-            child: child,
+        // open native ERPNext selector
     
-            warehouse_details: {
-                type: "Warehouse",
-                name: warehouse
-            },
+        new erpnext.SerialBatchPackageSelector(frm, item, (r) => {
     
-            callback: () => {
+            if (!r) return;
     
-                row.data(
-                    'serial_and_batch_bundle',
-                    child.serial_and_batch_bundle
-                );
+            // save bundle name
     
-                frappe.call({
-                    method: "frappe.client.get",
-                    args: {
-                        doctype: "Serial and Batch Bundle",
-                        name: child.serial_and_batch_bundle
-                    },
+            row.data(
+                'serial_and_batch_bundle',
+                r.name
+            );
     
-                    callback: (r) => {
+            // fetch selected batches from bundle
     
-                        let doc = r.message;
+            frappe.call({
+                method: "frappe.client.get",
+                args: {
+                    doctype: "Serial and Batch Bundle",
+                    name: r.name
+                },
     
-                        row.data(
-                            'batch_rows',
-                            doc.entries || []
-                        );
+                callback: (res) => {
     
-                        this.render_batches(row);
-                    }
-                });
-            }
+                    let doc = res.message || {};
+    
+                    // save entries locally
+    
+                    row.data(
+                        'batch_rows',
+                        doc.entries || []
+                    );
+    
+                    // render chips
+    
+                    this.render_batches(row);
+    
+                    frappe.show_alert({
+                        message: __('Batch Selected Successfully'),
+                        indicator: 'green'
+                    });
+    
+                    this.schedule_live_calculation();
+                }
+            });
+    
         });
     }
 
+    // render_batches(row) {
+    //     const batches = row.data('batch_rows') || [];
+    //     let html = batches.map(b => {
+    //         const days = b.expiry_date ? frappe.datetime.get_diff(b.expiry_date, frappe.datetime.get_today()) : null;
+    //         let status = 'good';
+    //         if (days !== null && days <= 0) status = 'bad';
+    //         else if (days !== null && days <= 90) status = 'warn';
+    //         return `<span class="pqs-batch-chip ${status}">${b.batch_no}: ${b.qty || 0}+${b.free_qty || 0}${b.expiry_date ? ' | Exp ' + b.expiry_date : ''}</span>`;
+    //     }).join('');
+    //     row.find('.batch-display').html(html || '<span class="pqs-muted">No batch allocated</span>');
+    //     row.toggleClass('pqs-row-warning', !!batches.length && batches.some(b => b.expiry_date && frappe.datetime.get_diff(b.expiry_date, frappe.datetime.get_today()) <= 90));
+    //     row.toggleClass('pqs-row-error', !!batches.length && batches.some(b => b.expiry_date && frappe.datetime.get_diff(b.expiry_date, frappe.datetime.get_today()) <= 0));
+    // }
+
+
     render_batches(row) {
+
         const batches = row.data('batch_rows') || [];
+    
         let html = batches.map(b => {
-            const days = b.expiry_date ? frappe.datetime.get_diff(b.expiry_date, frappe.datetime.get_today()) : null;
-            let status = 'good';
-            if (days !== null && days <= 0) status = 'bad';
-            else if (days !== null && days <= 90) status = 'warn';
-            return `<span class="pqs-batch-chip ${status}">${b.batch_no}: ${b.qty || 0}+${b.free_qty || 0}${b.expiry_date ? ' | Exp ' + b.expiry_date : ''}</span>`;
+    
+            let expiry = b.expiry_date
+                ? ` | Exp: ${frappe.datetime.str_to_user(b.expiry_date)}`
+                : '';
+    
+            return `
+                <span class="pqs-batch-chip good">
+                    ${b.batch_no || b.serial_no}
+                    : ${b.qty}
+                    ${expiry}
+                </span>
+            `;
+    
         }).join('');
-        row.find('.batch-display').html(html || '<span class="pqs-muted">No batch allocated</span>');
-        row.toggleClass('pqs-row-warning', !!batches.length && batches.some(b => b.expiry_date && frappe.datetime.get_diff(b.expiry_date, frappe.datetime.get_today()) <= 90));
-        row.toggleClass('pqs-row-error', !!batches.length && batches.some(b => b.expiry_date && frappe.datetime.get_diff(b.expiry_date, frappe.datetime.get_today()) <= 0));
+    
+        row.find('.batch-display').html(
+            html || '<span class="pqs-muted">No batch selected</span>'
+        );
     }
 
     price_lookup_dialog(row) {
@@ -759,7 +803,10 @@ class PharmaQuickSalePage {
                 rate: flt(row.find('.rate').val()),
                 discount_percentage: flt(row.find('.discount').val()),
                 qty: flt(row.find('.qty').val()),
-                free_qty: flt(row.find('.free-qty').val())
+                free_qty: flt(row.find('.free-qty').val()),
+            
+                serial_and_batch_bundle:
+                    row.data('serial_and_batch_bundle')
             });
 
             (row.data('batch_rows') || []).forEach(b => {

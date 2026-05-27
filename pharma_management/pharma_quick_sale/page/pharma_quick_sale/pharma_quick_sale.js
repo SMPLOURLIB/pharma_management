@@ -375,7 +375,7 @@ class PharmaQuickSalePage {
             this.schedule_live_calculation();
         });
 
-        this.render_batches(row);
+        this.render_bundle(row);
         this.calculate_totals();
         this.schedule_live_calculation();
     }
@@ -604,13 +604,11 @@ class PharmaQuickSalePage {
                     // save entries locally
     
                     row.data(
-                        'batch_rows',
-                        doc.entries || []
+                        'serial_and_batch_bundle',
+                        r.name
                     );
-    
-                    // render chips
-    
-                    this.render_batches(row);
+                    
+                    this.render_bundle(row);
     
                     frappe.show_alert({
                         message: __('Batch Selected Successfully'),
@@ -641,7 +639,7 @@ class PharmaQuickSalePage {
 
     render_batches(row) {
 
-        const batches = row.data('batch_rows') || [];
+        const batches = row.data('serial_and_batch_bundle') || [];
     
         let html = batches.map(b => {
     
@@ -662,6 +660,27 @@ class PharmaQuickSalePage {
         row.find('.batch-display').html(
             html || '<span class="pqs-muted">No batch selected</span>'
         );
+    }
+
+    render_bundle(row) {
+
+        const bundle =
+            row.data('serial_and_batch_bundle');
+    
+        if (!bundle) {
+    
+            row.find('.batch-display').html(
+                '<span class="pqs-muted">No Bundle Selected</span>'
+            );
+    
+            return;
+        }
+    
+        row.find('.batch-display').html(`
+            <span class="pqs-batch-chip good">
+                Bundle: ${bundle}
+            </span>
+        `);
     }
 
     price_lookup_dialog(row) {

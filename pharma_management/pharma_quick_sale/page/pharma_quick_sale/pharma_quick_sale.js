@@ -731,7 +731,7 @@ class PharmaQuickSalePage {
 
         const lines = (taxes || []).map(t => `
             <div class="pqs-info-line">
-                <span>${t.description || t.account_head}${t.rate ? ' (' + t.rate + '%)' : ''}</span>
+                <span>${t.account_head}${t.rate ? ' (' + t.rate + '%)' : ''}</span>
                 <strong>₹ ${flt(t.tax_amount).toFixed(2)}</strong>
             </div>
         `).join('');

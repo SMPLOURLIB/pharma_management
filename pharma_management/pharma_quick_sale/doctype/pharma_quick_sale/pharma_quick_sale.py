@@ -1138,7 +1138,6 @@ def _apply_sales_taxes_template_for_live_calc(invoice, customer=None):
             "base_tax_amount_after_discount_amount",
             "item_wise_tax_detail",
             "dont_recompute_tax",
-            "category"
         ],
         order_by="idx asc"
     )

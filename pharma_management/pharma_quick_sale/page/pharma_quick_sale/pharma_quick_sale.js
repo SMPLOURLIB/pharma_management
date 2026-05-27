@@ -469,41 +469,54 @@ class PharmaQuickSalePage {
     }
 
     manual_batch_dialog(row) {
-        // 1. Extract the item code from the row (adjust the selector/data key based on your HTML structure)
         let item_code = this.get_item_code(row); 
-    
-        let d = new frappe.ui.Dialog({
-            title: 'Add Batch',
-            fields: [
-                {
-                    fieldname: 'batch_no', 
-                    fieldtype: 'Link', 
-                    options: 'Batch', 
-                    label: 'Batch', 
-                    reqd: 1,
-                    // 2. Pass the filter directly into the field definition
-                    get_query: () => {
-                        return {
-                            filters: {
-                                'item': item_code
-                            }
-                        };
-                    }
-                },
-                {fieldname: 'qty', fieldtype: 'Float', label: 'Qty', default: flt(row.find('.qty').val())},
-                {fieldname: 'free_qty', fieldtype: 'Float', label: 'Free Qty', default: flt(row.find('.free-qty').val())}
-            ],
-            primary_action_label: 'Add',
-            primary_action: (values) => {
-                let batches = row.data('batch_rows') || [];
-                batches.push(values);
-                row.data('batch_rows', batches);
-                this.render_batches(row);
-                this.schedule_live_calculation();
-                d.hide();
+        let warehouse = this.warehouse.get_value();
+        let qty = flt(row.find('.qty').val()) + flt(row.find('.free-qty').val()); // Total stock physical rows needed
+
+        if (!item_code || !warehouse || qty <= 0) {
+            frappe.msgprint(__('Please select Item, Warehouse, and enter a valid Qty first.'));
+            return;
+        }
+
+        // Initialize ERPNext native dialog picker class
+        let selector = new erpnext.stock.SerialNoBatchNoSelector({
+            frm: this, // Pass the current page object context
+            item_code: item_code,
+            warehouse: warehouse,
+            qty: qty,
+            type_of_transaction: "Delivery Note", // Ensures validation of outgoing stock batches
+            
+            // Re-open selector with previously picked bundle ID if user clicks a second time
+            serial_and_batch_bundle: row.data('serial_and_batch_bundle') || "",
+
+            callback: (bundle_response) => {
+                if (bundle_response && bundle_response.name) {
+                    // 1. Store the overarching Bundle Name (e.g., 'SBB-00041') onto the row data
+                    row.data('serial_and_batch_bundle', bundle_response.name);
+
+                    // 2. Query internal components to populate the visual chips on your page
+                    frappe.db.get_all('Serial and Batch Entry', {
+                        filters: { parent: bundle_response.name },
+                        fields: ['batch_no', 'qty', 'expiry_date']
+                    }).then(entries => {
+                        let batches = entries.map(entry => ({
+                            batch_no: entry.batch_no,
+                            qty: entry.qty,
+                            free_qty: 0, // Native picker groups all quantities together
+                            expiry_date: entry.expiry_date
+                        }));
+
+                        row.data('batch_rows', batches);
+                        
+                        // Refreshes ui elements and updates backend calculation
+                        this.render_batches(row);
+                        this.schedule_live_calculation();
+                    });
+                }
             }
         });
-        d.show();
+
+        selector.show();
     }
 
     render_batches(row) {
@@ -643,6 +656,50 @@ class PharmaQuickSalePage {
         });
     }
 
+    // collect_data() {
+    //     let items = [];
+    //     let batch_allocations = [];
+
+    //     $('#pqs-items tr').each((i, el) => {
+    //         const row = $(el);
+    //         const row_id = row.data('row_id');
+    //         const item_code = this.get_item_code(row);
+    //         if (!item_code) return;
+
+    //         items.push({
+    //             row_id,
+    //             item_code,
+    //             rate: flt(row.find('.rate').val()),
+    //             discount_percentage: flt(row.find('.discount').val()),
+    //             qty: flt(row.find('.qty').val()),
+    //             free_qty: flt(row.find('.free-qty').val())
+    //         });
+
+    //         (row.data('batch_rows') || []).forEach(b => {
+    //             batch_allocations.push({
+    //                 item_row_id: row_id,
+    //                 item_code,
+    //                 batch_no: b.batch_no,
+    //                 expiry_date: b.expiry_date,
+    //                 available_qty: b.available_qty,
+    //                 qty: flt(b.qty),
+    //                 free_qty: flt(b.free_qty)
+    //             });
+    //         });
+    //     });
+
+    //     return {
+    //         customer: this.customer.get_value(),
+    //         company: this.company.get_value(),
+    //         warehouse: this.warehouse.get_value(),
+    //         posting_date: $('#pqs-posting-date').val(),
+    //         price_list: 'Standard Selling',
+    //         items,
+    //         batch_allocations
+    //     };
+    // }
+
+
     collect_data() {
         let items = [];
         let batch_allocations = [];
@@ -659,16 +716,19 @@ class PharmaQuickSalePage {
                 rate: flt(row.find('.rate').val()),
                 discount_percentage: flt(row.find('.discount').val()),
                 qty: flt(row.find('.qty').val()),
-                free_qty: flt(row.find('.free-qty').val())
+                free_qty: flt(row.find('.free-qty').val()),
+                
+                // --- ADD THIS LINE TO ATTACH BUNDLE TO SELLING LINE ROW ---
+                serial_and_batch_bundle: row.data('serial_and_batch_bundle') || ""
             });
 
+            // Keep this block active if you still rely on it for structural UI mappings
             (row.data('batch_rows') || []).forEach(b => {
                 batch_allocations.push({
                     item_row_id: row_id,
                     item_code,
                     batch_no: b.batch_no,
                     expiry_date: b.expiry_date,
-                    available_qty: b.available_qty,
                     qty: flt(b.qty),
                     free_qty: flt(b.free_qty)
                 });
